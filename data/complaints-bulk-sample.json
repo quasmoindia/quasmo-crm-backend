@@ -1,0 +1,164 @@
+{
+  "complaints": [
+    {
+      "subject": "Focus knob stuck on Model X200",
+      "description": "The coarse focus knob stopped turning after 2 weeks of use. Cannot focus on slides properly.",
+      "priority": "high",
+      "productModel": "X200",
+      "serialNumber": "MX200-001234",
+      "orderReference": "ORD-7890"
+    },
+    {
+      "subject": "Dim light output on LabPro 400",
+      "description": "LED illumination has become very dim compared to when first purchased. Already tried replacing bulb setting.",
+      "priority": "medium",
+      "productModel": "LabPro 400",
+      "serialNumber": "LP400-005678",
+      "orderReference": "INV-2024-001"
+    },
+    {
+      "subject": "Stage drift on digital microscope",
+      "description": "The motorized stage drifts slowly during time-lapse imaging. Calibration was done last month.",
+      "priority": "high",
+      "productModel": "DigiScope Pro",
+      "serialNumber": "DSP-009012",
+      "orderReference": "ORD-8012"
+    },
+    {
+      "subject": "Software not recognizing camera",
+      "description": "QuasmoView software fails to detect the attached camera after Windows update. USB connection is fine.",
+      "priority": "medium",
+      "productModel": "DigiScope Pro",
+      "serialNumber": "DSP-008901",
+      "orderReference": "ORD-7891"
+    },
+    {
+      "subject": "Condenser alignment issue",
+      "description": "Condenser is misaligned and I cannot center it using the knobs. Purchased 3 months ago.",
+      "priority": "low",
+      "productModel": "X200",
+      "serialNumber": "MX200-001456",
+      "orderReference": "ORD-7456"
+    },
+    {
+      "subject": "Objective lens scratch",
+      "description": "40x objective appears to have a scratch. Images show a permanent artifact. Need replacement or repair.",
+      "priority": "high",
+      "productModel": "LabPro 400",
+      "serialNumber": "LP400-005001",
+      "orderReference": "INV-2023-089"
+    },
+    {
+      "subject": "Power button unresponsive",
+      "description": "Unit sometimes does not power on. Have to try multiple times. Intermittent issue.",
+      "priority": "medium",
+      "productModel": "X200",
+      "serialNumber": "MX200-002001",
+      "orderReference": "ORD-7001"
+    },
+    {
+      "subject": "Warranty claim - damaged in shipping",
+      "description": "Box arrived with visible damage. Microscope base has a crack. Requesting replacement under warranty.",
+      "priority": "high",
+      "productModel": "LabPro 400",
+      "serialNumber": "LP400-006100",
+      "orderReference": "ORD-6100"
+    },
+    {
+      "subject": "Request for calibration certificate",
+      "description": "Need a new calibration certificate for our annual ISO audit. Unit was calibrated 11 months ago.",
+      "priority": "low",
+      "productModel": "DigiScope Pro",
+      "serialNumber": "DSP-007500",
+      "orderReference": "ORD-7500"
+    },
+    {
+      "subject": "Eyepiece fogging",
+      "description": "Eyepieces fog up during long sessions. Room humidity is controlled. Wondering if there is a seal issue.",
+      "priority": "low",
+      "productModel": "X200",
+      "serialNumber": "MX200-001789",
+      "orderReference": "ORD-7789"
+    },
+    {
+      "subject": "Stage clip broken",
+      "description": "The spring-loaded stage clip broke. Need a replacement part. Model X200.",
+      "priority": "medium",
+      "productModel": "X200",
+      "serialNumber": "MX200-001900",
+      "orderReference": "ORD-7900"
+    },
+    {
+      "subject": "USB 3.0 connection drops",
+      "description": "Camera connection drops every few minutes when using USB 3.0. Works stable on USB 2.0 but slower.",
+      "priority": "medium",
+      "productModel": "DigiScope Pro",
+      "serialNumber": "DSP-008200",
+      "orderReference": "ORD-8200"
+    },
+    {
+      "subject": "Uneven illumination field",
+      "description": "The illumination is noticeably brighter on the right side. Köhler alignment did not fix it.",
+      "priority": "medium",
+      "productModel": "LabPro 400",
+      "serialNumber": "LP400-004500",
+      "orderReference": "INV-2024-045"
+    },
+    {
+      "subject": "Dust inside objective",
+      "description": "Visible dust or debris inside the 10x objective. Affecting image quality. Unit is under warranty.",
+      "priority": "high",
+      "productModel": "X200",
+      "serialNumber": "MX200-002100",
+      "orderReference": "ORD-7100"
+    },
+    {
+      "subject": "Software license key invalid",
+      "description": "After reinstalling QuasmoView, the license key is rejected. Key was valid before reinstall.",
+      "priority": "high",
+      "productModel": "DigiScope Pro",
+      "serialNumber": "DSP-009500",
+      "orderReference": "ORD-9500"
+    },
+    {
+      "subject": "Request spare parts list",
+      "description": "Need a list of available spare parts and consumables for LabPro 400 for our lab inventory.",
+      "priority": "low",
+      "productModel": "LabPro 400",
+      "serialNumber": "LP400-005500",
+      "orderReference": "INV-2023-055"
+    },
+    {
+      "subject": "Filter wheel stuck",
+      "description": "The fluorescence filter wheel does not turn. It was working last week.",
+      "priority": "high",
+      "productModel": "LabPro 400",
+      "serialNumber": "LP400-006200",
+      "orderReference": "ORD-6200"
+    },
+    {
+      "subject": "Image stitching not working",
+      "description": "Panorama/stitching feature in QuasmoView fails with an error. Single capture works fine.",
+      "priority": "medium",
+      "productModel": "DigiScope Pro",
+      "serialNumber": "DSP-008800",
+      "orderReference": "ORD-8800"
+    },
+    {
+      "subject": "Base wobble",
+      "description": "Microscope base is not stable on the bench. Slight wobble when adjusting focus. All feet are in contact.",
+      "priority": "low",
+      "productModel": "X200",
+      "serialNumber": "MX200-001600",
+      "orderReference": "ORD-7600"
+    },
+    {
+      "subject": "Overheating after 2 hours",
+      "description": "LED module becomes very hot and the unit shuts down after about 2 hours of continuous use.",
+      "priority": "high",
+      "productModel": "LabPro 400",
+      "serialNumber": "LP400-005900",
+      "orderReference": "INV-2024-059"
+    }
+  ]
+}
