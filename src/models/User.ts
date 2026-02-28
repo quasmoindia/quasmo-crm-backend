@@ -5,7 +5,10 @@ export interface IUser extends Document {
   _id: mongoose.Types.ObjectId;
   fullName: string;
   email: string;
+  /** Optional phone for SMS (e.g. +91 98765 43210) */
+  phone?: string;
   password: string;
+  role?: string;
   comparePassword(candidatePassword: string): Promise<boolean>;
   createdAt: Date;
   updatedAt: Date;
@@ -27,11 +30,17 @@ const userSchema = new Schema<IUser>(
       lowercase: true,
       trim: true,
     },
+    phone: { type: String, trim: true },
     password: {
       type: String,
       required: [true, 'Password is required'],
       minlength: [6, 'Password must be at least 6 characters'],
       select: false,
+    },
+    role: {
+      type: String,
+      trim: true,
+      default: 'user',
     },
   },
   { timestamps: true }

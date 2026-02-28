@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import { User } from '../models/User.js';
+import { getRoleModuleIds } from '../services/roleCache.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-change-me';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
@@ -22,6 +23,7 @@ export async function signup(req: Request, res: Response): Promise<void> {
       return;
     }
     const user = await User.create({ fullName: fullName.trim(), email, password });
+    const roleModules = getRoleModuleIds(user.role ?? '') ?? ['*'];
     const token = jwt.sign(
       { userId: user._id },
       JWT_SECRET,
@@ -29,7 +31,7 @@ export async function signup(req: Request, res: Response): Promise<void> {
     );
     res.status(201).json({
       message: 'User created successfully',
-      user: { id: user._id, fullName: user.fullName, email: user.email },
+      user: { id: user._id, fullName: user.fullName, email: user.email, role: user.role ?? '', roleModules },
       token,
     });
   } catch (err) {
@@ -59,6 +61,7 @@ export async function login(req: Request, res: Response): Promise<void> {
       res.status(401).json({ message: 'Invalid email or password' });
       return;
     }
+    const roleModules = getRoleModuleIds(user.role ?? '') ?? ['*'];
     const token = jwt.sign(
       { userId: user._id },
       JWT_SECRET,
@@ -66,7 +69,7 @@ export async function login(req: Request, res: Response): Promise<void> {
     );
     res.json({
       message: 'Login successful',
-      user: { id: user._id, fullName: user.fullName, email: user.email },
+      user: { id: user._id, fullName: user.fullName, email: user.email, role: user.role ?? '', roleModules },
       token,
     });
   } catch {

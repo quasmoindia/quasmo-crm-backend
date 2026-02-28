@@ -1,6 +1,8 @@
 import type { Request, Response } from 'express';
+import mongoose from 'mongoose';
 import { Complaint } from '../models/Complaint.js';
 import type { ComplaintStatus, ComplaintPriority } from '../models/Complaint.js';
+import { imagekit, isImageKitConfigured } from '../lib/imagekit.js';
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 20;
@@ -14,6 +16,7 @@ type BulkComplaintItem = {
   productModel?: string;
   serialNumber?: string;
   orderReference?: string;
+  assignedTo?: string;
 };
 
 export async function createComplaint(req: Request, res: Response): Promise<void> {
@@ -26,6 +29,7 @@ export async function createComplaint(req: Request, res: Response): Promise<void
       productModel,
       serialNumber,
       orderReference,
+      assignedTo,
     } = req.body as {
       subject?: string;
       description?: string;
@@ -33,6 +37,7 @@ export async function createComplaint(req: Request, res: Response): Promise<void
       productModel?: string;
       serialNumber?: string;
       orderReference?: string;
+      assignedTo?: string;
     };
 
     if (!subject?.trim() || !description?.trim()) {
@@ -48,9 +53,11 @@ export async function createComplaint(req: Request, res: Response): Promise<void
       productModel: productModel?.trim(),
       serialNumber: serialNumber?.trim(),
       orderReference: orderReference?.trim(),
+      assignedTo: assignedTo || undefined,
     });
 
-    await complaint.populate('user', 'fullName email');
+    await complaint.populate('user', 'fullName email phone');
+    await complaint.populate('assignedTo', 'fullName email');
 
     res.status(201).json(complaint);
   } catch (err) {
@@ -91,6 +98,7 @@ export async function createComplaintsBulk(req: Request, res: Response): Promise
           productModel: item.productModel?.trim(),
           serialNumber: item.serialNumber?.trim(),
           orderReference: item.orderReference?.trim(),
+          assignedTo: item.assignedTo,
         });
       }
     }
@@ -109,11 +117,13 @@ export async function createComplaintsBulk(req: Request, res: Response): Promise
         productModel: c.productModel,
         serialNumber: c.serialNumber,
         orderReference: c.orderReference,
+        assignedTo: c.assignedTo || undefined,
       }))
     );
 
     const populated = await Complaint.find({ _id: { $in: created.map((d) => d._id) } })
-      .populate('user', 'fullName email')
+      .populate('user', 'fullName email phone')
+      .populate('assignedTo', 'fullName email')
       .lean();
 
     res.status(201).json({
@@ -137,6 +147,7 @@ export async function listComplaints(req: Request, res: Response): Promise<void>
       status,
       priority,
       user: userIdFilter,
+      assignedTo: assignedToFilter,
       search: searchQuery,
       dateFrom,
       dateTo,
@@ -146,6 +157,7 @@ export async function listComplaints(req: Request, res: Response): Promise<void>
       status?: ComplaintStatus;
       priority?: ComplaintPriority;
       user?: string;
+      assignedTo?: string;
       search?: string;
       dateFrom?: string;
       dateTo?: string;
@@ -157,6 +169,7 @@ export async function listComplaints(req: Request, res: Response): Promise<void>
     if (status) filter.status = status;
     if (priority) filter.priority = priority;
     if (userIdFilter) filter.user = userIdFilter;
+    if (assignedToFilter) filter.assignedTo = assignedToFilter;
     if (searchQuery?.trim()) {
       const term = searchQuery.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       filter.$or = [
@@ -186,7 +199,8 @@ export async function listComplaints(req: Request, res: Response): Promise<void>
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limitNum)
-        .populate('user', 'fullName email')
+        .populate('user', 'fullName email phone')
+        .populate('assignedTo', 'fullName email')
         .lean(),
       Complaint.countDocuments(filter),
     ]);
@@ -208,7 +222,10 @@ export async function listComplaints(req: Request, res: Response): Promise<void>
 export async function getComplaintById(req: Request, res: Response): Promise<void> {
   try {
     const { id } = req.params;
-    const complaint = await Complaint.findById(id).populate('user', 'fullName email');
+    const complaint = await Complaint.findById(id)
+      .populate('user', 'fullName email phone')
+      .populate('assignedTo', 'fullName email')
+      .populate('comments.author', 'fullName email');
 
     if (!complaint) {
       res.status(404).json({ message: 'Complaint not found' });
@@ -233,6 +250,7 @@ export async function updateComplaint(req: Request, res: Response): Promise<void
       serialNumber,
       orderReference,
       internalNotes,
+      assignedTo,
     } = req.body as {
       subject?: string;
       description?: string;
@@ -242,6 +260,7 @@ export async function updateComplaint(req: Request, res: Response): Promise<void
       serialNumber?: string;
       orderReference?: string;
       internalNotes?: string;
+      assignedTo?: string | null;
     };
 
     const complaint = await Complaint.findById(id);
@@ -258,9 +277,12 @@ export async function updateComplaint(req: Request, res: Response): Promise<void
     if (serialNumber !== undefined) complaint.serialNumber = serialNumber?.trim();
     if (orderReference !== undefined) complaint.orderReference = orderReference?.trim();
     if (internalNotes !== undefined) complaint.internalNotes = internalNotes?.trim();
+    if (assignedTo !== undefined) complaint.assignedTo = assignedTo ? (assignedTo as unknown as mongoose.Types.ObjectId) : undefined;
 
     await complaint.save();
-    await complaint.populate('user', 'fullName email');
+    await complaint.populate('user', 'fullName email phone');
+    await complaint.populate('assignedTo', 'fullName email');
+    await complaint.populate('comments.author', 'fullName email');
 
     res.json(complaint);
   } catch (err) {
@@ -286,5 +308,144 @@ export async function deleteComplaint(req: Request, res: Response): Promise<void
     res.status(204).send();
   } catch {
     res.status(500).json({ message: 'Failed to delete complaint' });
+  }
+}
+
+export async function listAssignableUsers(req: Request, res: Response): Promise<void> {
+  try {
+    const { User } = await import('../models/User.js');
+    const users = await User.find()
+      .select('_id fullName email')
+      .sort({ fullName: 1 })
+      .lean();
+    res.json({ data: users });
+  } catch {
+    res.status(500).json({ message: 'Failed to list users' });
+  }
+}
+
+export async function addComplaintComment(req: Request, res: Response): Promise<void> {
+  try {
+    const { id } = req.params;
+    const { text } = req.body as { text?: string };
+
+    if (!text?.trim()) {
+      res.status(400).json({ message: 'Comment text is required' });
+      return;
+    }
+
+    const complaint = await Complaint.findById(id);
+    if (!complaint) {
+      res.status(404).json({ message: 'Complaint not found' });
+      return;
+    }
+
+    complaint.comments = complaint.comments ?? [];
+    complaint.comments.push({
+      author: req.user!._id,
+      text: text.trim(),
+      createdAt: new Date(),
+    });
+    await complaint.save();
+
+    await complaint.populate('user', 'fullName email phone');
+    await complaint.populate('comments.author', 'fullName email');
+
+    res.status(201).json(complaint);
+  } catch (err) {
+    console.error('Add complaint comment error:', err);
+    res.status(500).json({ message: 'Failed to add comment' });
+  }
+}
+
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+const MAX_IMAGES_PER_UPLOAD = 10;
+const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
+
+export async function uploadComplaintImages(req: Request, res: Response): Promise<void> {
+  try {
+    if (!isImageKitConfigured()) {
+      res.status(503).json({ message: 'Image upload is not configured' });
+      return;
+    }
+
+    const { id } = req.params;
+    const complaint = await Complaint.findById(id);
+    if (!complaint) {
+      res.status(404).json({ message: 'Complaint not found' });
+      return;
+    }
+
+    const status = complaint.status as ComplaintStatus;
+    if (status !== 'in_progress' && status !== 'resolved') {
+      res.status(400).json({
+        message: 'Images can only be uploaded when status is In progress or Resolved',
+      });
+      return;
+    }
+
+    const files = (req as Request & { files?: Express.Multer.File[] }).files;
+    if (!Array.isArray(files) || files.length === 0) {
+      res.status(400).json({ message: 'No images uploaded. Use field name "images".' });
+      return;
+    }
+    if (files.length > MAX_IMAGES_PER_UPLOAD) {
+      res.status(400).json({ message: `Maximum ${MAX_IMAGES_PER_UPLOAD} images per upload` });
+      return;
+    }
+
+    const urls: string[] = [];
+    const errors: string[] = [];
+
+    for (const file of files) {
+      if (!file.buffer) {
+        errors.push(`${file.originalname}: no file data`);
+        continue;
+      }
+      if (!ALLOWED_IMAGE_TYPES.includes(file.mimetype)) {
+        errors.push(`${file.originalname}: invalid type. Use JPEG, PNG, GIF, or WebP.`);
+        continue;
+      }
+      if (file.size > MAX_IMAGE_SIZE_BYTES) {
+        errors.push(`${file.originalname}: file too large (max 5MB)`);
+        continue;
+      }
+
+      const base = file.originalname?.replace(/[^a-zA-Z0-9._-]/g, '_') || 'image';
+      const ext = base.includes('.') ? base.slice(base.lastIndexOf('.')) : '.jpg';
+      const fileName = `complaints/${id}/${Date.now()}-${Math.random().toString(36).slice(2, 9)}${ext}`;
+
+      try {
+        const result = await imagekit.upload({
+          file: file.buffer,
+          fileName,
+          folder: '/crm/complaints',
+          useUniqueFileName: true,
+        });
+        const data = result as { url?: string };
+        if (data?.url) {
+          urls.push(data.url);
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Upload failed';
+        errors.push(`${file.originalname}: ${msg}`);
+      }
+    }
+
+    if (urls.length > 0) {
+      complaint.images = complaint.images ?? [];
+      complaint.images.push(...urls);
+      await complaint.save();
+    }
+
+    res.status(201).json({
+      uploaded: urls.length,
+      failed: errors.length,
+      urls,
+      errors: errors.slice(0, 20),
+    });
+  } catch (err) {
+    console.error('Upload complaint images error:', err);
+    res.status(500).json({ message: 'Failed to upload images' });
   }
 }

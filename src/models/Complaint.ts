@@ -6,6 +6,8 @@ export type ComplaintPriority = 'low' | 'medium' | 'high';
 export interface IComplaint extends Document {
   _id: mongoose.Types.ObjectId;
   user: mongoose.Types.ObjectId;
+  /** User assigned to handle this complaint (support staff) */
+  assignedTo?: mongoose.Types.ObjectId;
   subject: string;
   description: string;
   status: ComplaintStatus;
@@ -18,8 +20,19 @@ export interface IComplaint extends Document {
   orderReference?: string;
   /** Internal notes (e.g. by support staff) */
   internalNotes?: string;
+  /** ImageKit URLs – upload allowed when status is in_progress or resolved */
+  images?: string[];
+  /** Comments (e.g. by support staff or customer) */
+  comments?: IComplaintComment[];
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface IComplaintComment {
+  _id?: mongoose.Types.ObjectId;
+  author: mongoose.Types.ObjectId;
+  text: string;
+  createdAt: Date;
 }
 
 interface IComplaintModel extends Model<IComplaint> {}
@@ -33,6 +46,11 @@ const complaintSchema = new Schema<IComplaint>(
       type: Schema.Types.ObjectId,
       ref: 'User',
       required: [true, 'User is required'],
+      index: true,
+    },
+    assignedTo: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
       index: true,
     },
     subject: {
@@ -61,12 +79,21 @@ const complaintSchema = new Schema<IComplaint>(
     serialNumber: { type: String, trim: true },
     orderReference: { type: String, trim: true },
     internalNotes: { type: String, trim: true },
+    images: { type: [String], default: [] },
+    comments: [
+      {
+        author: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+        text: { type: String, required: true, trim: true },
+        createdAt: { type: Date, default: Date.now },
+      },
+    ],
   },
   { timestamps: true }
 );
 
 complaintSchema.index({ createdAt: -1 });
 complaintSchema.index({ user: 1, createdAt: -1 });
+complaintSchema.index({ assignedTo: 1, status: 1 });
 
 export const Complaint = mongoose.model<IComplaint, IComplaintModel>(
   'Complaint',
