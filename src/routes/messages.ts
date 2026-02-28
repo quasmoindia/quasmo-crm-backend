@@ -6,13 +6,17 @@ import { canAccessModule } from '../services/roleCache.js';
 
 const router = express.Router();
 
-/** Allow access if user has either 'users' or 'complaints' module */
-function requireUsersOrComplaints(req: Request, res: Response, next: NextFunction): void {
+/** Allow access if user has 'users', 'complaints', or 'leads' module */
+function requireMessagingAccess(req: Request, res: Response, next: NextFunction): void {
   if (!req.user) {
     res.status(401).json({ message: 'Not authorized' });
     return;
   }
-  if (canAccessModule(req.user.role, 'users') || canAccessModule(req.user.role, 'complaints')) {
+  if (
+    canAccessModule(req.user.role, 'users') ||
+    canAccessModule(req.user.role, 'complaints') ||
+    canAccessModule(req.user.role, 'leads')
+  ) {
     next();
     return;
   }
@@ -20,7 +24,7 @@ function requireUsersOrComplaints(req: Request, res: Response, next: NextFunctio
 }
 
 router.use(protect);
-router.use(requireUsersOrComplaints);
+router.use(requireMessagingAccess);
 
 router.get('/', messageController.getThread);
 router.post('/send', messageController.sendMessage);

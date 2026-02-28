@@ -12,6 +12,7 @@ const BULK_MAX = 100;
 type BulkComplaintItem = {
   subject?: string;
   description?: string;
+  phone?: string;
   priority?: ComplaintPriority;
   productModel?: string;
   serialNumber?: string;
@@ -25,6 +26,7 @@ export async function createComplaint(req: Request, res: Response): Promise<void
     const {
       subject,
       description,
+      phone,
       priority,
       productModel,
       serialNumber,
@@ -33,6 +35,7 @@ export async function createComplaint(req: Request, res: Response): Promise<void
     } = req.body as {
       subject?: string;
       description?: string;
+      phone?: string;
       priority?: ComplaintPriority;
       productModel?: string;
       serialNumber?: string;
@@ -49,6 +52,7 @@ export async function createComplaint(req: Request, res: Response): Promise<void
       user: userId,
       subject: subject.trim(),
       description: description.trim(),
+      phone: phone?.trim(),
       priority: priority ?? 'medium',
       productModel: productModel?.trim(),
       serialNumber: serialNumber?.trim(),
@@ -94,6 +98,7 @@ export async function createComplaintsBulk(req: Request, res: Response): Promise
         toCreate.push({
           subject: item.subject.trim(),
           description: item.description.trim(),
+          phone: item.phone?.trim(),
           priority: item.priority ?? 'medium',
           productModel: item.productModel?.trim(),
           serialNumber: item.serialNumber?.trim(),
@@ -113,6 +118,7 @@ export async function createComplaintsBulk(req: Request, res: Response): Promise
         user: userId,
         subject: c.subject,
         description: c.description,
+        phone: c.phone,
         priority: c.priority ?? 'medium',
         productModel: c.productModel,
         serialNumber: c.serialNumber,
@@ -244,6 +250,7 @@ export async function updateComplaint(req: Request, res: Response): Promise<void
     const {
       subject,
       description,
+      phone,
       status,
       priority,
       productModel,
@@ -254,6 +261,7 @@ export async function updateComplaint(req: Request, res: Response): Promise<void
     } = req.body as {
       subject?: string;
       description?: string;
+      phone?: string;
       status?: ComplaintStatus;
       priority?: ComplaintPriority;
       productModel?: string;
@@ -271,6 +279,7 @@ export async function updateComplaint(req: Request, res: Response): Promise<void
 
     if (subject !== undefined) complaint.subject = subject.trim();
     if (description !== undefined) complaint.description = description.trim();
+    if (phone !== undefined) complaint.phone = phone?.trim();
     if (status !== undefined) complaint.status = status;
     if (priority !== undefined) complaint.priority = priority;
     if (productModel !== undefined) complaint.productModel = productModel?.trim();

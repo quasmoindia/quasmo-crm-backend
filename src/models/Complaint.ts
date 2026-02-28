@@ -10,6 +10,8 @@ export interface IComplaint extends Document {
   assignedTo?: mongoose.Types.ObjectId;
   subject: string;
   description: string;
+  /** Optional contact phone for SMS (e.g. complainant's number) */
+  phone?: string;
   status: ComplaintStatus;
   priority: ComplaintPriority;
   /** Microscope / product model name */
@@ -63,6 +65,7 @@ const complaintSchema = new Schema<IComplaint>(
       required: [true, 'Description is required'],
       trim: true,
     },
+    phone: { type: String, trim: true },
     status: {
       type: String,
       enum: { values: statusEnum, message: 'Invalid status' },
