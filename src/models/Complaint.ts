@@ -8,6 +8,14 @@ export interface IComplaint extends Document {
   user: mongoose.Types.ObjectId;
   /** User assigned to handle this complaint (support staff) */
   assignedTo?: mongoose.Types.ObjectId;
+  /** Staff user who created the complaint record */
+  createdBy?: mongoose.Types.ObjectId;
+  /** Staff user who last updated the complaint */
+  updatedBy?: mongoose.Types.ObjectId;
+  /** Staff user who closed the complaint (when status is closed) */
+  closedBy?: mongoose.Types.ObjectId;
+  /** When the complaint was closed */
+  closedAt?: Date;
   subject: string;
   description: string;
   /** Optional contact phone for SMS (e.g. complainant's number) */
@@ -55,6 +63,10 @@ const complaintSchema = new Schema<IComplaint>(
       ref: 'User',
       index: true,
     },
+    createdBy: { type: Schema.Types.ObjectId, ref: 'User' },
+    updatedBy: { type: Schema.Types.ObjectId, ref: 'User' },
+    closedBy: { type: Schema.Types.ObjectId, ref: 'User' },
+    closedAt: { type: Date },
     subject: {
       type: String,
       required: [true, 'Subject is required'],

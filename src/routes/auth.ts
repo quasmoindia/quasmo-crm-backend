@@ -7,6 +7,8 @@ const router = express.Router();
 
 router.post('/signup', authController.signup);
 router.post('/login', authController.login);
+router.post('/request-otp', authController.requestOtp);
+router.post('/login-otp', authController.loginWithOtp);
 
 router.get('/me', protect, (req, res) => {
   const u = req.user!;

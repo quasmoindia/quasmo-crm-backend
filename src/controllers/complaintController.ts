@@ -50,6 +50,7 @@ export async function createComplaint(req: Request, res: Response): Promise<void
 
     const complaint = await Complaint.create({
       user: userId,
+      createdBy: userId,
       subject: subject.trim(),
       description: description.trim(),
       phone: phone?.trim(),
@@ -62,6 +63,7 @@ export async function createComplaint(req: Request, res: Response): Promise<void
 
     await complaint.populate('user', 'fullName email phone');
     await complaint.populate('assignedTo', 'fullName email');
+    await complaint.populate('createdBy', 'fullName email');
 
     res.status(201).json(complaint);
   } catch (err) {
@@ -116,6 +118,7 @@ export async function createComplaintsBulk(req: Request, res: Response): Promise
     const created = await Complaint.insertMany(
       toCreate.map((c) => ({
         user: userId,
+        createdBy: userId,
         subject: c.subject,
         description: c.description,
         phone: c.phone,
@@ -130,6 +133,7 @@ export async function createComplaintsBulk(req: Request, res: Response): Promise
     const populated = await Complaint.find({ _id: { $in: created.map((d) => d._id) } })
       .populate('user', 'fullName email phone')
       .populate('assignedTo', 'fullName email')
+      .populate('createdBy', 'fullName email')
       .lean();
 
     res.status(201).json({
@@ -207,6 +211,9 @@ export async function listComplaints(req: Request, res: Response): Promise<void>
         .limit(limitNum)
         .populate('user', 'fullName email phone')
         .populate('assignedTo', 'fullName email')
+        .populate('createdBy', 'fullName email')
+        .populate('updatedBy', 'fullName email')
+        .populate('closedBy', 'fullName email')
         .lean(),
       Complaint.countDocuments(filter),
     ]);
@@ -231,6 +238,9 @@ export async function getComplaintById(req: Request, res: Response): Promise<voi
     const complaint = await Complaint.findById(id)
       .populate('user', 'fullName email phone')
       .populate('assignedTo', 'fullName email')
+      .populate('createdBy', 'fullName email')
+      .populate('updatedBy', 'fullName email')
+      .populate('closedBy', 'fullName email')
       .populate('comments.author', 'fullName email');
 
     if (!complaint) {
@@ -277,10 +287,19 @@ export async function updateComplaint(req: Request, res: Response): Promise<void
       return;
     }
 
+    const currentUserId = req.user!._id;
+    complaint.updatedBy = currentUserId as unknown as mongoose.Types.ObjectId;
+
     if (subject !== undefined) complaint.subject = subject.trim();
     if (description !== undefined) complaint.description = description.trim();
     if (phone !== undefined) complaint.phone = phone?.trim();
-    if (status !== undefined) complaint.status = status;
+    if (status !== undefined) {
+      complaint.status = status;
+      if (status === 'closed') {
+        complaint.closedBy = currentUserId as unknown as mongoose.Types.ObjectId;
+        complaint.closedAt = new Date();
+      }
+    }
     if (priority !== undefined) complaint.priority = priority;
     if (productModel !== undefined) complaint.productModel = productModel?.trim();
     if (serialNumber !== undefined) complaint.serialNumber = serialNumber?.trim();
@@ -291,6 +310,9 @@ export async function updateComplaint(req: Request, res: Response): Promise<void
     await complaint.save();
     await complaint.populate('user', 'fullName email phone');
     await complaint.populate('assignedTo', 'fullName email');
+    await complaint.populate('createdBy', 'fullName email');
+    await complaint.populate('updatedBy', 'fullName email');
+    await complaint.populate('closedBy', 'fullName email');
     await complaint.populate('comments.author', 'fullName email');
 
     res.json(complaint);
@@ -358,6 +380,10 @@ export async function addComplaintComment(req: Request, res: Response): Promise<
     await complaint.save();
 
     await complaint.populate('user', 'fullName email phone');
+    await complaint.populate('assignedTo', 'fullName email');
+    await complaint.populate('createdBy', 'fullName email');
+    await complaint.populate('updatedBy', 'fullName email');
+    await complaint.populate('closedBy', 'fullName email');
     await complaint.populate('comments.author', 'fullName email');
 
     res.status(201).json(complaint);
