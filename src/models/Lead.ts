@@ -1,8 +1,30 @@
 import mongoose, { Document, Model, Schema } from 'mongoose';
 
-/** 4-stage pipeline for microscope sales: New → Contacted → Proposal → Closed */
-export type LeadStatus = 'new' | 'contacted' | 'proposal' | 'closed';
+/** Sales pipeline including quotations & invoices */
+export type LeadStatus =
+  | 'new'
+  | 'contacted'
+  | 'qualified'
+  | 'proposal'
+  | 'quotation_sent'
+  | 'negotiation'
+  | 'invoice_sent'
+  | 'closed'
+  | 'lost';
+
 export type LeadSource = 'website' | 'referral' | 'cold_call' | 'campaign' | 'other';
+
+export type LeadDocumentSentType = 'quotation' | 'invoice' | 'proforma' | 'other';
+
+export interface ILeadDocumentSent {
+  _id?: mongoose.Types.ObjectId;
+  type: LeadDocumentSentType;
+  reference?: string;
+  amount?: string;
+  notes?: string;
+  sentAt: Date;
+  sentBy?: mongoose.Types.ObjectId;
+}
 
 export interface ILead extends Document {
   _id: mongoose.Types.ObjectId;
@@ -10,9 +32,17 @@ export interface ILead extends Document {
   phone: string;
   email?: string;
   company?: string;
+  /** Registered / business address (e.g. from GST lookup) */
+  address?: string;
+  /** GSTIN (India) or tax ID */
+  gstNumber?: string;
   status: LeadStatus;
   source?: LeadSource;
   notes?: string;
+  /** Log of quotations / invoices / proformas sent to the lead */
+  documentsSent?: ILeadDocumentSent[];
+  /** ImageKit URLs – quotes, PDFs, etc. */
+  attachments?: string[];
   /** User assigned to follow up (calling person) */
   assignedTo?: mongoose.Types.ObjectId;
   createdBy: mongoose.Types.ObjectId;
@@ -22,7 +52,19 @@ export interface ILead extends Document {
 
 interface ILeadModel extends Model<ILead> {}
 
-const statusEnum = ['new', 'contacted', 'proposal', 'closed'] as const;
+const statusEnum = [
+  'new',
+  'contacted',
+  'qualified',
+  'proposal',
+  'quotation_sent',
+  'negotiation',
+  'invoice_sent',
+  'closed',
+  'lost',
+] as const;
+
+const leadDocumentTypeEnum = ['quotation', 'invoice', 'proforma', 'other'] as const;
 const sourceEnum = ['website', 'referral', 'cold_call', 'campaign', 'other'] as const;
 
 const leadSchema = new Schema<ILead>(
@@ -40,6 +82,8 @@ const leadSchema = new Schema<ILead>(
     },
     email: { type: String, trim: true, lowercase: true },
     company: { type: String, trim: true },
+    address: { type: String, trim: true },
+    gstNumber: { type: String, trim: true, index: true },
     status: {
       type: String,
       enum: { values: statusEnum, message: 'Invalid status' },
@@ -52,6 +96,24 @@ const leadSchema = new Schema<ILead>(
       trim: true,
     },
     notes: { type: String, trim: true },
+    documentsSent: {
+      type: [
+        {
+          type: {
+            type: String,
+            enum: { values: leadDocumentTypeEnum, message: 'Invalid document type' },
+            required: true,
+          },
+          reference: { type: String, trim: true },
+          amount: { type: String, trim: true },
+          notes: { type: String, trim: true },
+          sentAt: { type: Date, default: Date.now },
+          sentBy: { type: Schema.Types.ObjectId, ref: 'User' },
+        },
+      ],
+      default: [],
+    },
+    attachments: { type: [String], default: [] },
     assignedTo: {
       type: Schema.Types.ObjectId,
       ref: 'User',

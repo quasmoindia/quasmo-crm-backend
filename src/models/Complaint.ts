@@ -5,6 +5,8 @@ export type ComplaintPriority = 'low' | 'medium' | 'high';
 
 export interface IComplaint extends Document {
   _id: mongoose.Types.ObjectId;
+  /** Human-readable ticket id, e.g. QUASMO-CMP-000042 */
+  ticketId?: string;
   user: mongoose.Types.ObjectId;
   /** User assigned to handle this complaint (support staff) */
   assignedTo?: mongoose.Types.ObjectId;
@@ -52,6 +54,13 @@ const priorityEnum = ['low', 'medium', 'high'] as const;
 
 const complaintSchema = new Schema<IComplaint>(
   {
+    ticketId: {
+      type: String,
+      trim: true,
+      unique: true,
+      sparse: true,
+      index: true,
+    },
     user: {
       type: Schema.Types.ObjectId,
       ref: 'User',

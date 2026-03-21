@@ -9,6 +9,7 @@ export const MODULE_IDS = [
   'roles',
   'complaints',
   'leads',
+  'invoices',
   // 'sales',
   // 'finance',
   // 'content',
@@ -21,6 +22,7 @@ export const MODULE_LABELS: Record<string, string> = {
   roles: 'Role management',
   complaints: 'Complaint management',
   leads: 'Lead management',
+  invoices: 'Tax invoices',
   // sales: 'Sales management',
   // finance: 'Finance management',
   // content: 'Content',
@@ -39,7 +41,7 @@ export const ROLE_LABELS: Record<string, string> = {
 /** Role id -> module ids (use '*' for full access) */
 export const ROLE_MODULE_MAP: Record<string, readonly string[]> = {
   admin: ['*'],
-  user: ['dashboard', 'complaints', 'leads'],
+  user: ['dashboard', 'complaints', 'leads', 'invoices'],
   viewer: ['dashboard'],
   // content_writer: ['dashboard', 'content'],
   // sales_manager: ['dashboard', 'sales', 'leads'],
@@ -61,7 +63,7 @@ export function isKnownRole(role: string): boolean {
 /** Default roles to seed when DB is empty (also used by seed) */
 export const DEFAULT_ROLES: { name: string; label: string; moduleIds: string[] }[] = [
   { name: 'admin', label: 'Admin', moduleIds: ['*'] },
-  { name: 'user', label: 'User', moduleIds: ['dashboard', 'complaints', 'leads'] },
+  { name: 'user', label: 'User', moduleIds: ['dashboard', 'complaints', 'leads', 'invoices'] },
   { name: 'viewer', label: 'Viewer', moduleIds: ['dashboard'] },
   // { name: 'content_writer', label: 'Content writer', moduleIds: ['dashboard', 'content'] },
   // { name: 'sales_manager', label: 'Sales manager', moduleIds: ['dashboard', 'sales', 'leads'] },

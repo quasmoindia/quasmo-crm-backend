@@ -101,3 +101,17 @@ export async function updateUser(req: Request, res: Response): Promise<void> {
     res.status(500).json({ message: 'Failed to update user' });
   }
 }
+
+export async function deleteUser(req: Request, res: Response): Promise<void> {
+  try {
+    const { id } = req.params;
+    const user = await User.findByIdAndDelete(id);
+    if (!user) {
+      res.status(404).json({ message: 'User not found' });
+      return;
+    }
+    res.status(204).send();
+  } catch {
+    res.status(500).json({ message: 'Failed to delete user' });
+  }
+}

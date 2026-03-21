@@ -3,6 +3,20 @@ import mongoose from 'mongoose';
 import { Complaint } from '../models/Complaint.js';
 import type { ComplaintStatus, ComplaintPriority } from '../models/Complaint.js';
 import { imagekit, isImageKitConfigured } from '../lib/imagekit.js';
+import { validateAttachmentFile, MAX_ATTACHMENT_BYTES } from '../lib/uploadAttachment.js';
+import { allocateNextComplaintTicketId } from '../lib/complaintTicketId.js';
+
+/** Assign ticket ids to lean list rows missing them (legacy data). */
+async function ensureLeanComplaintsHaveTicketIds(
+  docs: Array<{ _id: mongoose.Types.ObjectId; ticketId?: string | null | undefined }>
+): Promise<void> {
+  for (const doc of docs) {
+    if (doc.ticketId) continue;
+    const tid = await allocateNextComplaintTicketId();
+    await Complaint.updateOne({ _id: doc._id }, { $set: { ticketId: tid } });
+    doc.ticketId = tid;
+  }
+}
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 20;
@@ -48,7 +62,9 @@ export async function createComplaint(req: Request, res: Response): Promise<void
       return;
     }
 
+    const ticketId = await allocateNextComplaintTicketId();
     const complaint = await Complaint.create({
+      ticketId,
       user: userId,
       createdBy: userId,
       subject: subject.trim(),
@@ -115,8 +131,12 @@ export async function createComplaintsBulk(req: Request, res: Response): Promise
       return;
     }
 
+    const ticketIds = await Promise.all(
+      Array.from({ length: toCreate.length }, () => allocateNextComplaintTicketId())
+    );
     const created = await Complaint.insertMany(
-      toCreate.map((c) => ({
+      toCreate.map((c, i) => ({
+        ticketId: ticketIds[i],
         user: userId,
         createdBy: userId,
         subject: c.subject,
@@ -183,6 +203,7 @@ export async function listComplaints(req: Request, res: Response): Promise<void>
     if (searchQuery?.trim()) {
       const term = searchQuery.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       filter.$or = [
+        { ticketId: { $regex: term, $options: 'i' } },
         { subject: { $regex: term, $options: 'i' } },
         { description: { $regex: term, $options: 'i' } },
       ];
@@ -218,6 +239,8 @@ export async function listComplaints(req: Request, res: Response): Promise<void>
       Complaint.countDocuments(filter),
     ]);
 
+    await ensureLeanComplaintsHaveTicketIds(complaints);
+
     res.json({
       data: complaints,
       pagination: {
@@ -246,6 +269,11 @@ export async function getComplaintById(req: Request, res: Response): Promise<voi
     if (!complaint) {
       res.status(404).json({ message: 'Complaint not found' });
       return;
+    }
+
+    if (!complaint.ticketId) {
+      complaint.ticketId = await allocateNextComplaintTicketId();
+      await complaint.save();
     }
 
     res.json(complaint);
@@ -285,6 +313,10 @@ export async function updateComplaint(req: Request, res: Response): Promise<void
     if (!complaint) {
       res.status(404).json({ message: 'Complaint not found' });
       return;
+    }
+
+    if (!complaint.ticketId) {
+      complaint.ticketId = await allocateNextComplaintTicketId();
     }
 
     const currentUserId = req.user!._id;
@@ -377,6 +409,9 @@ export async function addComplaintComment(req: Request, res: Response): Promise<
       text: text.trim(),
       createdAt: new Date(),
     });
+    if (!complaint.ticketId) {
+      complaint.ticketId = await allocateNextComplaintTicketId();
+    }
     await complaint.save();
 
     await complaint.populate('user', 'fullName email phone');
@@ -393,14 +428,12 @@ export async function addComplaintComment(req: Request, res: Response): Promise<
   }
 }
 
-const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-const MAX_IMAGES_PER_UPLOAD = 10;
-const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
+const MAX_FILES_PER_UPLOAD = 10;
 
 export async function uploadComplaintImages(req: Request, res: Response): Promise<void> {
   try {
     if (!isImageKitConfigured()) {
-      res.status(503).json({ message: 'Image upload is not configured' });
+      res.status(503).json({ message: 'File upload is not configured' });
       return;
     }
 
@@ -411,21 +444,26 @@ export async function uploadComplaintImages(req: Request, res: Response): Promis
       return;
     }
 
+    if (!complaint.ticketId) {
+      complaint.ticketId = await allocateNextComplaintTicketId();
+      await complaint.save();
+    }
+
     const status = complaint.status as ComplaintStatus;
     if (status !== 'in_progress' && status !== 'resolved') {
       res.status(400).json({
-        message: 'Images can only be uploaded when status is In progress or Resolved',
+        message: 'Files can only be uploaded when status is In progress or Resolved',
       });
       return;
     }
 
     const files = (req as Request & { files?: Express.Multer.File[] }).files;
     if (!Array.isArray(files) || files.length === 0) {
-      res.status(400).json({ message: 'No images uploaded. Use field name "images".' });
+      res.status(400).json({ message: 'No files uploaded. Use field name "images".' });
       return;
     }
-    if (files.length > MAX_IMAGES_PER_UPLOAD) {
-      res.status(400).json({ message: `Maximum ${MAX_IMAGES_PER_UPLOAD} images per upload` });
+    if (files.length > MAX_FILES_PER_UPLOAD) {
+      res.status(400).json({ message: `Maximum ${MAX_FILES_PER_UPLOAD} files per upload` });
       return;
     }
 
@@ -437,18 +475,27 @@ export async function uploadComplaintImages(req: Request, res: Response): Promis
         errors.push(`${file.originalname}: no file data`);
         continue;
       }
-      if (!ALLOWED_IMAGE_TYPES.includes(file.mimetype)) {
-        errors.push(`${file.originalname}: invalid type. Use JPEG, PNG, GIF, or WebP.`);
+      const blocked = validateAttachmentFile(file);
+      if (blocked) {
+        errors.push(blocked);
         continue;
       }
-      if (file.size > MAX_IMAGE_SIZE_BYTES) {
-        errors.push(`${file.originalname}: file too large (max 5MB)`);
+      if (file.size > MAX_ATTACHMENT_BYTES) {
+        errors.push(`${file.originalname}: file too large (max ${Math.round(MAX_ATTACHMENT_BYTES / (1024 * 1024))}MB)`);
         continue;
       }
 
-      const base = file.originalname?.replace(/[^a-zA-Z0-9._-]/g, '_') || 'image';
-      const ext = base.includes('.') ? base.slice(base.lastIndexOf('.')) : '.jpg';
-      const fileName = `complaints/${id}/${Date.now()}-${Math.random().toString(36).slice(2, 9)}${ext}`;
+      const base = file.originalname?.replace(/[^a-zA-Z0-9._-]/g, '_') || 'file';
+      const extFromName = base.includes('.') ? base.slice(base.lastIndexOf('.')) : '';
+      const mime = file.mimetype || '';
+      const fallbackExt =
+        extFromName ||
+        (mime === 'application/pdf'
+          ? '.pdf'
+          : mime.startsWith('image/')
+            ? '.jpg'
+            : '');
+      const fileName = `complaints/${id}/${Date.now()}-${Math.random().toString(36).slice(2, 9)}${fallbackExt}`;
 
       try {
         const result = await imagekit.upload({
@@ -481,6 +528,6 @@ export async function uploadComplaintImages(req: Request, res: Response): Promis
     });
   } catch (err) {
     console.error('Upload complaint images error:', err);
-    res.status(500).json({ message: 'Failed to upload images' });
+    res.status(500).json({ message: 'Failed to upload files' });
   }
 }
