@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { TaxInvoice } from '../models/TaxInvoice.js';
+import { SignaturePreset } from '../models/SignaturePreset.js';
 import type { ITaxInvoiceLineItem } from '../models/TaxInvoice.js';
 import { TAX_DOCUMENT_KINDS, type TaxDocumentKind } from '../models/taxDocumentKinds.js';
 import { buildTaxInvoiceHtml } from '../lib/taxInvoiceHtml.js';
@@ -9,6 +10,7 @@ import { effectiveGstRate } from '../lib/taxInvoiceGst.js';
 import { renderInvoicePdf } from '../lib/renderInvoicePdf.js';
 import { imagekit, isImageKitConfigured } from '../lib/imagekit.js';
 import { validateAttachmentFile, MAX_ATTACHMENT_BYTES } from '../lib/uploadAttachment.js';
+import { allocateNextDocumentNumber, peekNextDocumentNumber } from '../lib/documentNumber.js';
 
 function toDocumentKind(v: unknown): TaxDocumentKind {
   const s = String(v ?? 'tax_invoice').trim().toLowerCase().replace(/-/g, '_');
@@ -19,6 +21,25 @@ function toDocumentKind(v: unknown): TaxDocumentKind {
 function normUrl(v: unknown): string | undefined {
   const s = String(v ?? '').trim();
   return s || undefined;
+}
+
+/**
+ * If invoice references a signature preset but no issuer image URLs were sent (e.g. payload omitting fields),
+ * copy all three URLs from the preset. Skips when any URL is already present so manual overrides stay intact.
+ */
+async function mergeIssuerUrlsFromSignaturePreset(body: Record<string, unknown>): Promise<void> {
+  const raw = body.signaturePresetId;
+  if (raw === undefined || raw === null || raw === '') return;
+  const id = String(raw).trim();
+  if (!mongoose.Types.ObjectId.isValid(id)) return;
+  const keys = ['issuerStampUrl', 'issuerSignatureUrl', 'issuerDigitalSignatureUrl'] as const;
+  const anyFromClient = keys.some((k) => String(body[k] ?? '').trim() !== '');
+  if (anyFromClient) return;
+  const preset = await SignaturePreset.findById(id).lean();
+  if (!preset) return;
+  for (const k of keys) {
+    body[k] = String((preset as Record<string, unknown>)[k] ?? '');
+  }
 }
 
 function pdfFilename(kind: string | undefined, invoiceNo: string): string {
@@ -101,6 +122,7 @@ export async function listTaxInvoices(req: Request, res: Response): Promise<void
         { invoiceNo: { $regex: search, $options: 'i' } },
         { billedToName: { $regex: search, $options: 'i' } },
         { contractNo: { $regex: search, $options: 'i' } },
+        { remarks: { $regex: search, $options: 'i' } },
       ];
     }
 
@@ -127,6 +149,81 @@ export async function listTaxInvoices(req: Request, res: Response): Promise<void
   } catch (err) {
     console.error('listTaxInvoices', err);
     res.status(500).json({ message: 'Failed to list invoices' });
+  }
+}
+
+/** Preview next document number for a kind (no DB increment). */
+export async function getNextDocumentNumber(req: Request, res: Response): Promise<void> {
+  try {
+    const raw = String(req.query.documentKind ?? 'tax_invoice').trim();
+    const kind = toDocumentKind(raw);
+    const nextNumber = await peekNextDocumentNumber(kind);
+    res.json({ documentKind: kind, nextNumber });
+  } catch (err) {
+    console.error('getNextDocumentNumber', err);
+    res.status(500).json({ message: 'Failed to preview document number' });
+  }
+}
+
+const LINE_SUGGESTION_MAX = 30;
+
+/**
+ * Distinct line items from all saved invoices (tax / proforma / quotation), newest first per description.
+ * Optional `q` filters descriptions (case-insensitive substring). Used for invoice line-item autocomplete.
+ */
+export async function getLineItemSuggestions(req: Request, res: Response): Promise<void> {
+  try {
+    const q = String(req.query.q ?? '').trim();
+    const limit = Math.min(
+      LINE_SUGGESTION_MAX,
+      Math.max(1, parseInt(String(req.query.limit), 10) || 15)
+    );
+
+    const pipeline: mongoose.PipelineStage[] = [
+      { $unwind: '$items' },
+      {
+        $addFields: {
+          descTrim: { $trim: { input: { $ifNull: ['$items.description', ''] } } },
+        },
+      },
+      { $match: { descTrim: { $ne: '' } } },
+    ];
+
+    if (q.length > 0) {
+      const safe = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      pipeline.push({ $match: { descTrim: { $regex: safe, $options: 'i' } } });
+    }
+
+    pipeline.push(
+      { $sort: { updatedAt: -1 } },
+      {
+        $group: {
+          _id: '$descTrim',
+          hsnSac: { $first: '$items.hsnSac' },
+          unit: { $first: '$items.unit' },
+          price: { $first: '$items.price' },
+          lastUsed: { $first: '$updatedAt' },
+        },
+      },
+      { $sort: { lastUsed: -1 } },
+      { $limit: limit },
+      {
+        $project: {
+          _id: 0,
+          description: '$_id',
+          hsnSac: { $ifNull: ['$hsnSac', ''] },
+          unit: { $ifNull: ['$unit', 'Pcs.'] },
+          price: { $ifNull: ['$price', 0] },
+          lastUsed: 1,
+        },
+      }
+    );
+
+    const rows = await TaxInvoice.aggregate(pipeline);
+    res.json({ data: rows });
+  } catch (err) {
+    console.error('getLineItemSuggestions', err);
+    res.status(500).json({ message: 'Failed to load line item suggestions' });
   }
 }
 
@@ -199,11 +296,8 @@ export async function createTaxInvoice(req: Request, res: Response): Promise<voi
     const userId = req.user!._id;
     const body = req.body as Record<string, unknown>;
 
-    const invoiceNo = String(body.invoiceNo ?? '').trim();
-    if (!invoiceNo) {
-      res.status(400).json({ message: 'invoiceNo is required' });
-      return;
-    }
+    const kind = toDocumentKind(body.documentKind);
+    const invoiceNo = await allocateNextDocumentNumber(kind);
 
     const invoiceDate = body.invoiceDate ? new Date(String(body.invoiceDate)) : new Date();
     if (Number.isNaN(invoiceDate.getTime())) {
@@ -219,7 +313,7 @@ export async function createTaxInvoice(req: Request, res: Response): Promise<voi
 
     const dup = await TaxInvoice.findOne({ invoiceNo }).lean();
     if (dup) {
-      res.status(409).json({ message: 'An invoice with this number already exists' });
+      res.status(409).json({ message: 'Document number collision — retry or contact support' });
       return;
     }
 
@@ -235,10 +329,19 @@ export async function createTaxInvoice(req: Request, res: Response): Promise<voi
       bankAccountId = new mongoose.Types.ObjectId(String(bankRaw).trim());
     }
 
+    let signaturePresetId: mongoose.Types.ObjectId | undefined;
+    const sigPresetRaw = body.signaturePresetId;
+    if (sigPresetRaw && String(sigPresetRaw).trim()) {
+      signaturePresetId = new mongoose.Types.ObjectId(String(sigPresetRaw).trim());
+    }
+
+    await mergeIssuerUrlsFromSignaturePreset(body);
+
     const doc = await TaxInvoice.create({
       leadId,
-      documentKind: toDocumentKind(body.documentKind),
+      documentKind: kind,
       bankAccountId,
+      signaturePresetId,
       sellerGstin: body.sellerGstin,
       sellerName: body.sellerName,
       sellerAddress: body.sellerAddress,
@@ -251,7 +354,7 @@ export async function createTaxInvoice(req: Request, res: Response): Promise<voi
       reverseCharge: body.reverseCharge,
       transport: body.transport,
       vehicleNo: body.vehicleNo,
-      station: body.station,
+      paymentTerms: body.paymentTerms,
       ewayBillNo: body.ewayBillNo,
       dateOfRemoval: body.dateOfRemoval,
       freight: body.freight,
@@ -263,6 +366,7 @@ export async function createTaxInvoice(req: Request, res: Response): Promise<voi
       shippedToContact: body.shippedToContact,
       shippedToGstin: body.shippedToGstin,
       contractNo: body.contractNo,
+      remarks: String(body.remarks ?? '').trim(),
       items: computed.items.filter((i) => i.description || i.qty > 0 || i.price > 0),
       gstRate: computed.gstRate,
       gstAmount: computed.gstAmount,
@@ -272,6 +376,8 @@ export async function createTaxInvoice(req: Request, res: Response): Promise<voi
       bankAccountNo: body.bankAccountNo,
       bankIfsc: body.bankIfsc,
       bankBranch: body.bankBranch,
+      bankUpiId: String(body.bankUpiId ?? '').trim(),
+      bankQrUrl: String(body.bankQrUrl ?? '').trim(),
       termsAndConditions: body.termsAndConditions,
       amountInWords: computed.amountInWords,
       taxableTotal: computed.taxableTotal,
@@ -308,19 +414,9 @@ export async function updateTaxInvoice(req: Request, res: Response): Promise<voi
       return;
     }
 
-    if (body.invoiceNo !== undefined) {
-      const nextNo = String(body.invoiceNo).trim();
-      if (!nextNo) {
-        res.status(400).json({ message: 'invoiceNo cannot be empty' });
-        return;
-      }
-      const dup = await TaxInvoice.findOne({ invoiceNo: nextNo, _id: { $ne: doc._id } }).lean();
-      if (dup) {
-        res.status(409).json({ message: 'Another invoice already uses this number' });
-        return;
-      }
-      doc.invoiceNo = nextNo;
-    }
+    await mergeIssuerUrlsFromSignaturePreset(body as Record<string, unknown>);
+
+    // Document / invoice number is immutable after create (auto-assigned).
 
     if (body.invoiceDate !== undefined) {
       const d = new Date(String(body.invoiceDate));
@@ -352,7 +448,7 @@ export async function updateTaxInvoice(req: Request, res: Response): Promise<voi
       'reverseCharge',
       'transport',
       'vehicleNo',
-      'station',
+      'paymentTerms',
       'ewayBillNo',
       'dateOfRemoval',
       'freight',
@@ -364,10 +460,13 @@ export async function updateTaxInvoice(req: Request, res: Response): Promise<voi
       'shippedToContact',
       'shippedToGstin',
       'contractNo',
+      'remarks',
       'bankName',
       'bankAccountNo',
       'bankIfsc',
       'bankBranch',
+      'bankUpiId',
+      'bankQrUrl',
       'termsAndConditions',
       'issuerSignatureUrl',
       'issuerStampUrl',
@@ -398,6 +497,15 @@ export async function updateTaxInvoice(req: Request, res: Response): Promise<voi
         doc.set('bankAccountId', null);
       } else if (b) {
         doc.bankAccountId = new mongoose.Types.ObjectId(String(b).trim()) as never;
+      }
+    }
+
+    if (body.signaturePresetId !== undefined) {
+      const s = body.signaturePresetId;
+      if (s === null || s === '') {
+        doc.set('signaturePresetId', null);
+      } else if (s) {
+        doc.signaturePresetId = new mongoose.Types.ObjectId(String(s).trim()) as never;
       }
     }
 

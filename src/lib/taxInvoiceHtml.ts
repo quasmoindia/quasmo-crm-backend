@@ -19,24 +19,57 @@ function formatDate(d: Date | string): string {
   return `${day}-${month}-${year}`;
 }
 
+/** Date of removal: support YYYY-MM-DD or DD-MM-YYYY / DD/MM/YYYY text for PDF */
+function formatRemovalDateDisplay(s: unknown): string {
+  const raw = String(s ?? '').trim();
+  if (!raw) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const [y, mo, d] = raw.split('-').map(Number);
+    const dt = new Date(y, mo - 1, d);
+    if (!Number.isNaN(dt.getTime())) return formatDate(dt);
+  }
+  const m = raw.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2}|\d{4})$/);
+  if (m) {
+    let y = parseInt(m[3], 10);
+    if (y < 100) y += 2000;
+    const dt = new Date(y, parseInt(m[2], 10) - 1, parseInt(m[1], 10));
+    if (!Number.isNaN(dt.getTime())) return formatDate(dt);
+  }
+  return raw;
+}
+
 function formatNum(n: number): string {
   return n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-/** Safe for HTML attribute src (must be http(s)); strips quotes */
+/** Safe for HTML attribute src (must be http(s)); escape & and quotes so query strings (e.g. ImageKit) are not broken */
 function safeImgSrc(url: unknown): string {
   const u = String(url ?? '').trim();
   if (!/^https?:\/\//i.test(u)) return '';
-  return u.replace(/"/g, '&quot;');
+  return u.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
 }
 
-function imgBlock(url: unknown, caption: string): string {
-  const src = safeImgSrc(url);
-  if (!src) return '';
-  return `<div style="text-align:center;">
-    <img src="${src}" alt="" style="max-height:52px;max-width:140px;object-fit:contain;display:block;margin:0 auto 2px;"/>
-    <span style="font-size:7px;color:#444;">${esc(caption)}</span>
-  </div>`;
+/** UPI ID text only in the bank-details row (QR is shown in the footer UPI column). */
+function bankUpiIdLine(upi: unknown): string {
+  const upiStr = String(upi ?? '').trim();
+  if (!upiStr) return '';
+  return `<div style="margin-top:4px;font-size:9px;"><strong>UPI ID:</strong> ${esc(upiStr)}</div>`;
+}
+
+/** Center column: UPI payment QR (not e-invoice). */
+function footerUpiQrColumn(upi: unknown, qrUrl: unknown): string {
+  const src = safeImgSrc(qrUrl);
+  const upiStr = String(upi ?? '').trim();
+  let inner = `<strong style="font-size:10px;display:block;margin-bottom:6px;">UPI QR Code</strong>`;
+  if (src) {
+    inner += `<img src="${src}" alt="" style="max-width:130px;max-height:130px;object-fit:contain;border:1px solid #ccc;padding:4px;background:#fff;display:block;margin:4px auto 0;"/>`;
+  } else {
+    inner += `<div style="margin-top:16px;min-height:88px;display:flex;align-items:center;justify-content:center;font-size:8px;color:#999;">—</div>`;
+  }
+  if (upiStr) {
+    inner += `<div style="margin-top:6px;font-size:8px;"><strong>UPI:</strong> ${esc(upiStr)}</div>`;
+  }
+  return `<td class="upi-qr-col c" style="width:34%;vertical-align:top;">${inner}</td>`;
 }
 
 type InvoiceLike = Pick<
@@ -51,10 +84,9 @@ type InvoiceLike = Pick<
   | 'invoiceNo'
   | 'invoiceDate'
   | 'placeOfSupply'
-  | 'reverseCharge'
   | 'transport'
   | 'vehicleNo'
-  | 'station'
+  | 'paymentTerms'
   | 'ewayBillNo'
   | 'dateOfRemoval'
   | 'freight'
@@ -66,6 +98,7 @@ type InvoiceLike = Pick<
   | 'shippedToContact'
   | 'shippedToGstin'
   | 'contractNo'
+  | 'remarks'
   | 'items'
   | 'gstRate'
   | 'igstRate'
@@ -73,6 +106,8 @@ type InvoiceLike = Pick<
   | 'bankAccountNo'
   | 'bankIfsc'
   | 'bankBranch'
+  | 'bankUpiId'
+  | 'bankQrUrl'
   | 'termsAndConditions'
   | 'amountInWords'
   | 'taxableTotal'
@@ -82,6 +117,23 @@ type InvoiceLike = Pick<
   | 'issuerStampUrl'
   | 'issuerDigitalSignatureUrl'
 >;
+
+/** Issuer images only (no captions) for signatory block */
+function issuerSigImg(url: unknown): string {
+  const src = safeImgSrc(url);
+  if (!src) return '';
+  return `<img src="${src}" alt="" style="max-height:56px;max-width:140px;object-fit:contain;display:inline-block;vertical-align:bottom;"/>`;
+}
+
+function issuerSignatureRow(inv: InvoiceLike): string {
+  const parts = [
+    issuerSigImg(inv.issuerStampUrl),
+    issuerSigImg(inv.issuerSignatureUrl),
+    issuerSigImg(inv.issuerDigitalSignatureUrl),
+  ].filter(Boolean);
+  if (!parts.length) return '';
+  return `<div style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:center;gap:12px;margin-top:4px;">${parts.join('')}</div>`;
+}
 
 function documentKindTitle(kind: string | undefined): string {
   switch (kind) {
@@ -177,10 +229,10 @@ export function buildTaxInvoiceHtml(inv: InvoiceLike): string {
     .tot-strong { font-weight: bold; font-size: 11px; }
     .words { font-weight: bold; padding: 6px; }
     .bank { font-size: 9px; }
-    .footer-split td { width: 50%; }
+    .footer-three td { width: 33.33%; vertical-align: top; }
     .terms { font-size: 8px; line-height: 1.4; }
-    .sign { text-align: center; font-size: 10px; padding-top: 24px; }
-    .sign-box { min-height: 64px; border: 1px dashed #999; margin: 8px 0; }
+    .sign { text-align: center; font-size: 10px; padding-top: 6px; }
+    .upi-qr-col { font-size: 9px; }
   </style>
 </head>
 <body>
@@ -200,20 +252,19 @@ export function buildTaxInvoiceHtml(inv: InvoiceLike): string {
       <tr>
         <td style="width:50%">
           <table>
-            <tr><td class="meta-label nb">Invoice No.</td><td class="nb">${esc(inv.invoiceNo)}</td></tr>
-            <tr><td class="meta-label nb">Dated</td><td class="nb">${esc(formatDate(inv.invoiceDate))}</td></tr>
-            <tr><td class="meta-label nb">Place of Supply</td><td class="nb">${esc(inv.placeOfSupply)}</td></tr>
-            <tr><td class="meta-label nb">Reverse Charge</td><td class="nb">${esc(inv.reverseCharge)}</td></tr>
-            <tr><td class="meta-label nb">Transport</td><td class="nb">${esc(inv.transport)}</td></tr>
+            <tr><td class="meta-label nb">Invoice No.:</td><td class="nb">${esc(inv.invoiceNo)}</td></tr>
+            <tr><td class="meta-label nb">Dated:</td><td class="nb">${esc(formatDate(inv.invoiceDate))}</td></tr>
+            <tr><td class="meta-label nb">Place of Supply:</td><td class="nb">${esc(inv.placeOfSupply)}</td></tr>
+            <tr><td class="meta-label nb">Transport:</td><td class="nb">${esc(inv.transport)}</td></tr>
+            <tr><td class="meta-label nb">Vehicle No.:</td><td class="nb">${esc(inv.vehicleNo)}</td></tr>
           </table>
         </td>
         <td style="width:50%">
           <table>
-            <tr><td class="meta-label nb">Vehicle No.</td><td class="nb">${esc(inv.vehicleNo)}</td></tr>
-            <tr><td class="meta-label nb">Station</td><td class="nb">${esc(inv.station)}</td></tr>
-            <tr><td class="meta-label nb">E-Way Bill No.</td><td class="nb">${esc(inv.ewayBillNo)}</td></tr>
-            <tr><td class="meta-label nb">Date of Removal</td><td class="nb">${esc(inv.dateOfRemoval)}</td></tr>
-            <tr><td class="meta-label nb">Freight</td><td class="nb">${esc(inv.freight)}</td></tr>
+            <tr><td class="meta-label nb">Payment terms:</td><td class="nb">${esc(inv.paymentTerms)}</td></tr>
+            <tr><td class="meta-label nb">E-Way Bill No.:</td><td class="nb">${esc(inv.ewayBillNo)}</td></tr>
+            <tr><td class="meta-label nb">Date of Removal:</td><td class="nb">${esc(formatRemovalDateDisplay(inv.dateOfRemoval))}</td></tr>
+            <tr><td class="meta-label nb">Freight:</td><td class="nb">${esc(inv.freight)}</td></tr>
           </table>
         </td>
       </tr>
@@ -239,6 +290,7 @@ export function buildTaxInvoiceHtml(inv: InvoiceLike): string {
 
     <table>
       <tr><td><strong>Reference / Contract No.:</strong> ${esc(inv.contractNo)}</td></tr>
+      <tr><td><strong>Remarks:</strong> ${esc(inv.remarks)}</td></tr>
     </table>
 
     <table>
@@ -306,25 +358,21 @@ export function buildTaxInvoiceHtml(inv: InvoiceLike): string {
         A/c: ${esc(inv.bankAccountNo)} &nbsp;|&nbsp;
         IFSC: ${esc(inv.bankIfsc)} &nbsp;|&nbsp;
         Branch: ${esc(inv.bankBranch)}
+        ${bankUpiIdLine(inv.bankUpiId)}
       </td></tr>
     </table>
 
-    <table class="footer-split">
+    <table class="footer-three">
       <tr>
-        <td class="terms">
+        <td class="terms" style="width:33%">
           <strong>Terms &amp; Conditions</strong>
           <div style="margin-top:4px">${terms}</div>
         </td>
-        <td class="sign">
-          <div>Signature</div>
-          <div class="sign-box"></div>
-          <div style="margin-top:8px">for <strong>${esc(inv.sellerName)}</strong></div>
-          <div style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:center;gap:10px;margin-top:6px;min-height:40px;">
-            ${imgBlock(inv.issuerStampUrl, 'Stamp')}
-            ${imgBlock(inv.issuerSignatureUrl, 'Signature')}
-            ${imgBlock(inv.issuerDigitalSignatureUrl, 'Digital signature')}
-          </div>
-          <div style="margin-top:10px">Authorised Signatory</div>
+        ${footerUpiQrColumn(inv.bankUpiId, inv.bankQrUrl)}
+        <td class="sign" style="width:33%">
+          <div style="margin-top:4px;text-align:center;font-size:10px;">for <strong>${esc(inv.sellerName)}</strong></div>
+          ${issuerSignatureRow(inv)}
+          <div style="margin-top:10px;text-align:center;font-size:10px;font-weight:bold;">Authorised Signatory</div>
         </td>
       </tr>
     </table>

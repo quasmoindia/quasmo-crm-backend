@@ -14,6 +14,8 @@ router.use(protect);
 router.use(requireModule('invoices'));
 
 router.get('/', taxInvoiceController.listTaxInvoices);
+router.get('/next-number', taxInvoiceController.getNextDocumentNumber);
+router.get('/line-item-suggestions', taxInvoiceController.getLineItemSuggestions);
 router.post('/', taxInvoiceController.createTaxInvoice);
 
 router.get('/:id/preview', taxInvoiceController.getTaxInvoicePreview);

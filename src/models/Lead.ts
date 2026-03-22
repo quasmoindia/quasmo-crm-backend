@@ -6,8 +6,6 @@ export type LeadStatus =
   | 'contacted'
   | 'qualified'
   | 'proposal'
-  | 'quotation_sent'
-  | 'negotiation'
   | 'invoice_sent'
   | 'closed'
   | 'lost';
@@ -57,8 +55,6 @@ const statusEnum = [
   'contacted',
   'qualified',
   'proposal',
-  'quotation_sent',
-  'negotiation',
   'invoice_sent',
   'closed',
   'lost',

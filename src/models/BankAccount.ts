@@ -8,6 +8,10 @@ export interface IBankAccount extends Document {
   accountNo: string;
   ifsc: string;
   branch: string;
+  /** UPI VPA for payments, e.g. merchant@paytm */
+  upiId: string;
+  /** HTTPS URL to UPI QR image (e.g. ImageKit) */
+  qrUrl: string;
   isActive: boolean;
   sortOrder: number;
   createdBy: mongoose.Types.ObjectId;
@@ -24,6 +28,8 @@ const bankAccountSchema = new Schema<IBankAccount>(
     accountNo: { type: String, required: true, trim: true },
     ifsc: { type: String, required: true, trim: true, uppercase: true },
     branch: { type: String, trim: true, default: '' },
+    upiId: { type: String, trim: true, default: '' },
+    qrUrl: { type: String, trim: true, default: '' },
     isActive: { type: Boolean, default: true, index: true },
     sortOrder: { type: Number, default: 0 },
     createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },

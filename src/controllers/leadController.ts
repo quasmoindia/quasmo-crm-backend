@@ -23,8 +23,6 @@ const VALID_STATUSES: LeadStatus[] = [
   'contacted',
   'qualified',
   'proposal',
-  'quotation_sent',
-  'negotiation',
   'invoice_sent',
   'closed',
   'lost',
@@ -42,7 +40,9 @@ function toLeadStatus(s: unknown): LeadStatus {
   if (!raw) return 'new';
   let v = normalizeLeadStatusKey(raw);
   const aliases: Record<string, LeadStatus> = {
-    quote_sent: 'quotation_sent',
+    quote_sent: 'proposal',
+    quotation_sent: 'proposal',
+    negotiation: 'proposal',
     invoiced: 'invoice_sent',
     won: 'closed',
   };

@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import { Role } from '../models/Role.js';
+import { User } from '../models/User.js';
 import { loadRoleCache, setRoleInCache } from '../services/roleCache.js';
 import { MODULE_IDS, MODULE_LABELS } from '../config/roles.js';
 
@@ -76,6 +77,33 @@ export async function updateRole(req: Request, res: Response): Promise<void> {
       return;
     }
     res.status(500).json({ message: 'Failed to update role' });
+  }
+}
+
+export async function deleteRole(req: Request, res: Response): Promise<void> {
+  try {
+    const { id } = req.params;
+    const role = await Role.findById(id);
+    if (!role) {
+      res.status(404).json({ message: 'Role not found' });
+      return;
+    }
+    if (role.name === 'admin') {
+      res.status(403).json({ message: 'The admin role cannot be deleted' });
+      return;
+    }
+    const assigned = await User.countDocuments({ role: role.name });
+    if (assigned > 0) {
+      res.status(409).json({
+        message: `Cannot delete this role: ${assigned} user(s) are still assigned to "${role.label}". Reassign them first.`,
+      });
+      return;
+    }
+    await Role.deleteOne({ _id: id });
+    await loadRoleCache();
+    res.json({ message: 'Role deleted' });
+  } catch {
+    res.status(500).json({ message: 'Failed to delete role' });
   }
 }
 

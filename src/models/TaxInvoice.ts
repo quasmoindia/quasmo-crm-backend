@@ -24,6 +24,9 @@ export interface ITaxInvoice extends Document {
   /** Bank picked from master list (optional; details also stored on invoice for the PDF) */
   bankAccountId?: mongoose.Types.ObjectId;
 
+  /** Saved stamp/signature set (optional; URLs also stored on invoice for the PDF) */
+  signaturePresetId?: mongoose.Types.ObjectId;
+
   sellerGstin: string;
   sellerName: string;
   sellerAddress: string;
@@ -39,7 +42,8 @@ export interface ITaxInvoice extends Document {
   transport: string;
 
   vehicleNo: string;
-  station: string;
+  /** Shown on PDF (e.g. Net 30, Advance) */
+  paymentTerms: string;
   ewayBillNo: string;
   dateOfRemoval: string;
   freight: string;
@@ -54,6 +58,7 @@ export interface ITaxInvoice extends Document {
   shippedToGstin: string;
 
   contractNo: string;
+  remarks: string;
 
   items: ITaxInvoiceLineItem[];
 
@@ -73,6 +78,9 @@ export interface ITaxInvoice extends Document {
   bankAccountNo: string;
   bankIfsc: string;
   bankBranch: string;
+  bankUpiId: string;
+  /** HTTPS URL to UPI QR image for PDF */
+  bankQrUrl: string;
 
   termsAndConditions: string;
 
@@ -121,6 +129,8 @@ const taxInvoiceSchema = new Schema<ITaxInvoice>(
 
     bankAccountId: { type: Schema.Types.ObjectId, ref: 'BankAccount', index: true },
 
+    signaturePresetId: { type: Schema.Types.ObjectId, ref: 'SignaturePreset', index: true },
+
     sellerGstin: { type: String, trim: true, default: '06AAAFQ0374K1ZA' },
     sellerName: {
       type: String,
@@ -147,7 +157,7 @@ const taxInvoiceSchema = new Schema<ITaxInvoice>(
     transport: { type: String, trim: true, default: '' },
 
     vehicleNo: { type: String, trim: true, default: '' },
-    station: { type: String, trim: true, default: '' },
+    paymentTerms: { type: String, trim: true, default: '' },
     ewayBillNo: { type: String, trim: true, default: '' },
     dateOfRemoval: { type: String, trim: true, default: '' },
     freight: { type: String, trim: true, default: '' },
@@ -162,6 +172,7 @@ const taxInvoiceSchema = new Schema<ITaxInvoice>(
     shippedToGstin: { type: String, trim: true, default: '' },
 
     contractNo: { type: String, trim: true, default: '' },
+    remarks: { type: String, trim: true, default: '' },
 
     items: { type: [lineItemSchema], default: [] },
 
@@ -174,6 +185,8 @@ const taxInvoiceSchema = new Schema<ITaxInvoice>(
     bankAccountNo: { type: String, trim: true, default: '' },
     bankIfsc: { type: String, trim: true, default: '' },
     bankBranch: { type: String, trim: true, default: '' },
+    bankUpiId: { type: String, trim: true, default: '' },
+    bankQrUrl: { type: String, trim: true, default: '' },
 
     termsAndConditions: {
       type: String,

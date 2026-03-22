@@ -8,6 +8,7 @@ import configRoutes from './config.js';
 import messageRoutes from './messages.js';
 import taxInvoiceRoutes from './taxInvoices.js';
 import bankAccountRoutes from './bankAccounts.js';
+import signaturePresetRoutes from './signaturePresets.js';
 
 const router = express.Router();
 
@@ -17,6 +18,7 @@ router.use('/complaints', complaintRoutes);
 router.use('/leads', leadRoutes);
 router.use('/invoices', taxInvoiceRoutes);
 router.use('/bank-accounts', bankAccountRoutes);
+router.use('/signature-presets', signaturePresetRoutes);
 router.use('/users', userRoutes);
 router.use('/roles', roleRoutes);
 router.use('/messages', messageRoutes);
