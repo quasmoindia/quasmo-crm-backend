@@ -4,9 +4,7 @@ import mongoose, { Document, Model, Schema } from 'mongoose';
 export type LeadStatus =
   | 'new'
   | 'contacted'
-  | 'qualified'
   | 'proposal'
-  | 'invoice_sent'
   | 'closed'
   | 'lost';
 
@@ -53,9 +51,7 @@ interface ILeadModel extends Model<ILead> {}
 const statusEnum = [
   'new',
   'contacted',
-  'qualified',
   'proposal',
-  'invoice_sent',
   'closed',
   'lost',
 ] as const;

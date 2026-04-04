@@ -21,9 +21,7 @@ const BULK_UPLOAD_MAX = 500;
 const VALID_STATUSES: LeadStatus[] = [
   'new',
   'contacted',
-  'qualified',
   'proposal',
-  'invoice_sent',
   'closed',
   'lost',
 ];
@@ -43,7 +41,6 @@ function toLeadStatus(s: unknown): LeadStatus {
     quote_sent: 'proposal',
     quotation_sent: 'proposal',
     negotiation: 'proposal',
-    invoiced: 'invoice_sent',
     won: 'closed',
   };
   if (aliases[v]) v = aliases[v]!;
