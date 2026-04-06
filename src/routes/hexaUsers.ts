@@ -9,5 +9,7 @@ router.use(requireModule('users'));
 
 router.get('/', hexaUsersController.listHexaUsers);
 router.post('/', hexaUsersController.createHexaUser);
+router.patch('/:id', hexaUsersController.updateHexaUser);
+router.delete('/:id', hexaUsersController.deleteHexaUser);
 
 export default router;
