@@ -4,6 +4,7 @@ import hexaAuthRoutes from './hexaAuth.js';
 import complaintRoutes from './complaints.js';
 import leadRoutes from './leads.js';
 import userRoutes from './users.js';
+import hexaUserRoutes from './hexaUsers.js';
 import roleRoutes from './roles.js';
 import configRoutes from './config.js';
 import messageRoutes from './messages.js';
@@ -22,6 +23,7 @@ router.use('/invoices', taxInvoiceRoutes);
 router.use('/bank-accounts', bankAccountRoutes);
 router.use('/signature-presets', signaturePresetRoutes);
 router.use('/users', userRoutes);
+router.use('/hexa-users', hexaUserRoutes);
 router.use('/roles', roleRoutes);
 router.use('/messages', messageRoutes);
 
